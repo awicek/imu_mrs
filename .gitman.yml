@@ -11,18 +11,4 @@ sources:
         target: mrs_llcp
     scripts:
       - git submodule update --init --recursive
-sources_locked:
-  - repo: https://github.com/ctu-mrs/mrs_llcp
-    name: mrs_llcp
-    rev: 3d09365c587ca9a14d18cca1e331358f4ac39f72
-    type: git
-    sparse_paths:
-      -
-    links:
-      - source: ''
-        target: mrs_llcp
-    scripts:
-      - git submodule update --init --recursive
-default_group: ''
-groups:
-  -
+

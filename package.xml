@@ -1,5 +1,6 @@
 <?xml version="1.0"?>
-<package format="2">
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
 
   <name>mrs_llcp_ros</name>
   <version>0.0.1</version>
@@ -7,23 +8,25 @@
 
   <maintainer email="hertdani@fel.cvut.cz">Daniel Hert</maintainer>
   <maintainer email="Tomas.baca@fel.cvut.cz">Tomas Baca</maintainer>
-
   <license>BSD 3-Clause</license>
 
   <author email="hertdani@fel.cvut.cz">Daniel Hert</author>
 
-  <buildtool_depend>catkin</buildtool_depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <depend>roscpp</depend>
-  <depend>cmake_modules</depend>
-  <depend>nodelet</depend>
+  <depend>rclcpp</depend>
+  <depend>rclcpp_components</depend>
+  
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+
   <depend>mrs_msgs</depend>
+  <depend>mrs_modules_msgs</depend>
+  <depend>mrs_lib</depend>
+  <depend>mrs_serial</depend>
 
   <export>
-
-    <!-- The plugins.xml file defines nodelet as a plugin -->
-    <nodelet plugin="${prefix}/plugins.xml" />
-
+    <build_type>ament_cmake</build_type>
   </export>
 
 </package>

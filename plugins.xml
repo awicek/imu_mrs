@@ -1,5 +1,0 @@
-<library path="lib/libMrsLlcpRos">
-  <class name="mrs_llcp_ros/MrsLlcpRos" type="mrs_llcp_ros::MrsLlcpRos" base_class_type="nodelet::Nodelet">
-    <description>MrsLlcpRos nodelet</description>
-  </class>
-</library>
