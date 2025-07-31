@@ -1,6 +1,9 @@
 #include "llcp_ros.h"
 
 
+const std::string MrsLlcpRos::received_msgs_label_ = "Received Messages";
+const std::string MrsLlcpRos::sent_msgs_label_ = "Sent Messages";
+
 /*MrsLlcpRos::MrsLlcpRos() //{ */
 
 MrsLlcpRos::MrsLlcpRos(rclcpp::NodeOptions options) :
@@ -38,23 +41,16 @@ void MrsLlcpRos::initialize()
     mrs_lib::ParamLoader param_loader(node_, "llcp_ros");
 
     param_loader.addYamlFileFromParam("config_private");
-    param_loader.addYamlFileFromParam("config_public");
 
-    // todo remove
-    std::string def_portname = "/dev/ttyACM0";
-    int def_baudrate = 115200;
-    bool def_pretty_log = 0;
+    param_loader.loadParam("portname", portname_);
+    param_loader.loadParam("baudrate", baudrate_);
+    param_loader.loadParam("statistic_period_s", stat_period_s_);
 
-    param_loader.loadParam("portname", portname_, def_portname);
-    param_loader.loadParam("baudrate", baudrate_, def_baudrate);
-    param_loader.loadParam("pretty_log", pretty_log_, def_pretty_log);
-
-    // todo uncomment
-    // if (!param_loader.loadedSuccessfully()) {
-    //     RCLCPP_ERROR(node_->get_logger(), "[AutomaticStart]: Could not load all parameters!");
-    //     rclcpp::shutdown();
-    //     exit(1);
-    // }
+    if (!param_loader.loadedSuccessfully()) {
+        RCLCPP_ERROR(node_->get_logger(), "[AutomaticStart]: Could not load all parameters!");
+        rclcpp::shutdown();
+        exit(1);
+    }
     
     // | ----------------------- subscribers ----------------------------------------------------- |
     
@@ -71,6 +67,12 @@ void MrsLlcpRos::initialize()
     
     ph_llcp_rx_ = mrs_lib::PublisherHandler<mrs_modules_msgs::msg::Llcp>(node_, "~/llcp_in");
 
+    // | --------------------- serial port ------------------------------------------------------- |
+    
+    serial_port_.set_node(node_);
+    connectToSerial();
+    initialized_ = true;
+    
     // | ----------------------- timers ---------------------------------------------------------- |
     
     mrs_lib::TimerHandlerOptions timer_opts_start;
@@ -80,22 +82,20 @@ void MrsLlcpRos::initialize()
 
     {
         std::function<void()> timer_connection_cb = std::bind(
-            &MrsLlcpRos::timerConnection, this);
+            &MrsLlcpRos::timerCbConnection, this);
         timer_connection_ = std::make_shared<TimerType>(timer_opts_start,
             rclcpp::Rate(timer_connection_rate_, clock_), timer_connection_cb);
     }
+    if (stat_period_s_ > 0)
+
     {
+        timer_statistics_rate_ = 1.0 / stat_period_s_;
         std::function<void()> timer_statistics_cb = std::bind(
-            &MrsLlcpRos::timerStatistics, this);
+            &MrsLlcpRos::timerCbStatistics, this);
         timer_statistics_ = std::make_shared<TimerType>(timer_opts_start, 
             rclcpp::Rate(timer_statistics_rate_, clock_), timer_statistics_cb);
     }
 
-    // | --------------------- serial port ------------------------------------------------------- |
-    
-    serial_port_.set_node(node_);
-    connectToSerial();
-    initialized_ = true;
 
     RCLCPP_INFO(node_->get_logger(), "MrsLlcpRos sucessfully initialized.");
 }
@@ -148,11 +148,11 @@ bool MrsLlcpRos::openSerialPort(std::string portname, int baudrate)
 
 //}
 
-/* timerConnection() //{ */
+/* timerCbConnection() //{ */
 
-void MrsLlcpRos::timerConnection()
+void MrsLlcpRos::timerCbConnection()
 {
-    RCLCPP_INFO(node_->get_logger(), "Maintainer timer called");
+    RCLCPP_DEBUG(node_->get_logger(), "Maintainer timer called");
 
     bool connected;
     {
@@ -184,18 +184,22 @@ void MrsLlcpRos::timerConnection()
 
 //}
 
-/* printStatistics() //{ */
-// TODO add logic with pretty_log_
-void MrsLlcpRos::printStatistics(void)
+/* printStatistic() //{ */
+
+void MrsLlcpRos::printStatistic(std::vector<msg_stats_t> &stats, std::mutex &stat_mtx,
+    const std::string &label)
 {
-    RCLCPP_INFO(this->get_logger(), "------------------- Received Stats -------------------");
+    RCLCPP_INFO(this->get_logger(), "------------------- %s -------------------", label.c_str());
     RCLCPP_INFO(this->get_logger(), " ID |  Count | Avg/s  | Last Δ/s");
     RCLCPP_INFO(this->get_logger(), "----+--------+--------+-----------");
 
-    for (const auto &stat : received_msgs_stats_)
     {
-        RCLCPP_INFO(this->get_logger(), "%3d | %6d | %6.2f | %7.2f",
-                    stat.id, stat.num, stat.avrg_per_s, stat.last_s);
+        std::scoped_lock lock(stat_mtx);
+        for (const auto &stat : stats)
+        {
+            RCLCPP_INFO(this->get_logger(), "%3d | %6d | %6.2f | %7.2f",
+            stat.id, stat.num, stat.avrg_per_s, stat.last_s);
+        }
     }
 
     RCLCPP_INFO(this->get_logger(), "------------------------------------------------------");
@@ -203,34 +207,38 @@ void MrsLlcpRos::printStatistics(void)
 
 //}
 
-/* printStatistics() //{ */
-// TODO add logic with pretty print
-void MrsLlcpRos::updateStatistics(void)
-{
-    for (const auto &msg : received_msgs_) {
-        auto it = std::find_if(received_msgs_stats_.begin(), received_msgs_stats_.end(),
-                               [&](const msg_stats_t &stat) { return stat.id == msg.id; });
+/* updateStatistic() //{ */
 
-        if (it == received_msgs_stats_.end())
+void MrsLlcpRos::updateStatistic(std::vector<msg_counter_t> &msgs, std::vector<msg_stats_t> &stats,
+        std::mutex & stat_mtx)
+{
+    std::scoped_lock lock(stat_mtx);
+
+    for (const auto &msg : msgs)
+    {
+        auto it = std::find_if(stats.begin(), stats.end(),
+        [&](const msg_stats_t &stat) { return stat.id == msg.id; });
+        
+        if (it == stats.end())
         {
             msg_stats_t stat;
             stat.id = msg.id;
             stat.num = msg.num;
-            stat.avrg_per_s = static_cast<float>(msg.num) / 
+            stat.avrg_per_s = static_cast<float>(msg.num) *
                               static_cast<float>(timer_statistics_rate_);
             stat.last_num_ = msg.num;
-            stat.time = timer_statistics_rate_;
-            stat.last_s = static_cast<float>(msg.num);
-            received_msgs_stats_.push_back(stat);
+            stat.time = 1 / timer_statistics_rate_;
+            stat.last_s = static_cast<float>(msg.num) / 
+                          static_cast<float>(timer_statistics_rate_);
+            stats.push_back(stat);
         }
         else
         {
-            it->last_s = static_cast<float>(msg.num - it->last_num_) /
+            it->last_s = static_cast<float>(msg.num - it->last_num_) * 
                          static_cast<float>(timer_statistics_rate_);
             it->num = msg.num;
-            it->time += timer_statistics_rate_;
-            it->avrg_per_s = static_cast<float>(msg.num) /
-                             it->time;
+            it->time += (1 / timer_statistics_rate_);
+            it->avrg_per_s = static_cast<float>(msg.num) / it->time;
             it->last_num_ = msg.num;
         }
     }
@@ -238,19 +246,26 @@ void MrsLlcpRos::updateStatistics(void)
 
 //}
 
-/* timerStatistics() //{ */
+/* timerCbStatistics() //{ */
 
-void MrsLlcpRos::timerStatistics()
+void MrsLlcpRos::timerCbStatistics()
 {
-    updateStatistics();
-    printStatistics();
+    {
+        std::scoped_lock lock(mutex_connected_);
+        if (! connected_)
+            return;
+    }
+
+    updateStatistic(received_msgs_, received_msgs_stats_, mutex_received_msgs_);
+    updateStatistic(sent_msgs_, sent_msgs_stats_, mutex_sent_msgs_);
+    printStatistic(received_msgs_stats_, mutex_received_msgs_, received_msgs_label_); 
+    printStatistic(sent_msgs_stats_, mutex_sent_msgs_, sent_msgs_label_); 
 };
 
 //}
 
 /* serialThreadRx() //{ */
 // TODO: Do it in blocking way, not spinning
-// TODO: make statistic thread safe
 void MrsLlcpRos::serialThreadRx(void)
 {
     uint8_t rx_buffer[SERIAL_BUFFER_SIZE];
@@ -270,6 +285,7 @@ void MrsLlcpRos::serialThreadRx(void)
         {
             RCLCPP_WARN(this->get_logger(),
             "Terminating serial thread because the serial port was disconnected");
+            resetStatistics();
             return;
         }
 
@@ -294,7 +310,6 @@ void MrsLlcpRos::serialThreadRx(void)
                         "Received message id = %d  size %d checksum is: %d",
                         message_in->payload[0], llcp_receiver_.payload_size, checksum_matched);
           
-          
                     mrs_modules_msgs::msg::Llcp ros_msg; 
                     ros_msg.stamp = clock_->now();
                     ros_msg.checksum_matched = checksum_matched;
@@ -304,21 +319,7 @@ void MrsLlcpRos::serialThreadRx(void)
 
                     ph_llcp_rx_.publish(ros_msg);
 
-                    // statistics about the received messages 
-                    auto it = std::find_if(received_msgs_.begin(), received_msgs_.end(),
-                        [&](const struct msg_counter_t& msg) {
-                        return msg.id == message_in->payload[0];
-                    });
-                    if (it != received_msgs_.end()) {
-                        it->num++;
-                    }
-                    else
-                    {
-                        msg_counter_t tmp;
-                        tmp.id  = message_in->payload[0];
-                        tmp.num = 1;
-                        received_msgs_.push_back(tmp);
-                    }
+                    addMsgToStatistic(message_in->payload[0], received_msgs_, mutex_received_msgs_);
                 }
             }   
         }
@@ -356,16 +357,58 @@ void MrsLlcpRos::sendLlcpMessage(const mrs_modules_msgs::msg::Llcp::ConstSharedP
         return;
     }
 
-
     uint8_t out_buffer[SERIAL_BUFFER_SIZE];
-    
     uint16_t msg_len = llcp_prepareMessage((uint8_t *)msg->payload.data(),
             (uint8_t)msg->payload.size(), out_buffer);
 
     if (! serial_port_.sendCharArray(out_buffer, msg_len))
         RCLCPP_ERROR(this->get_logger(), "Erorr during sending of the llcp message.");
 
-    // todo statisctic about send messages 
+    addMsgToStatistic(msg->id, sent_msgs_, mutex_sent_msgs_);
+}
+
+//}
+
+/* resetStatistics() //{ */
+
+void MrsLlcpRos::resetStatistics(void)
+{
+    {
+        std::scoped_lock lock(mutex_received_msgs_);
+        received_msgs_.clear();
+        received_msgs_stats_.clear();
+    }
+    {
+        std::scoped_lock lock(mutex_sent_msgs_);
+        sent_msgs_.clear();
+        sent_msgs_stats_.clear();
+    }
+}
+
+//}
+
+/* addMsgToStatistic() //{ */
+
+void MrsLlcpRos::addMsgToStatistic(uint8_t msg_id, std::vector<msg_counter_t> &stat,
+         std::mutex &stat_mtx)
+{
+    std::scoped_lock lock(stat_mtx);
+
+     auto it = std::find_if(stat.begin(), stat.end(),
+                    [&](const struct msg_counter_t& msg) {
+                    return msg.id == msg_id;
+                    });
+    if (it != stat.end())
+    {
+        it->num++;
+    }
+    else
+    {
+        msg_counter_t tmp;
+        tmp.id  = msg_id;
+        tmp.num = 1;
+        stat.push_back(tmp);
+    }
 }
 
 //}

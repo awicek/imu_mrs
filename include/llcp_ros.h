@@ -7,10 +7,7 @@
 #include <mrs_lib/service_server_handler.h>
 #include <mrs_lib/timer_handler.h>
 
-
 #include <mrs_modules_msgs/msg/llcp.hpp>
-
-
 #include <mrs_serial/serial_port.h>
 
 extern "C"{
@@ -58,11 +55,11 @@ private:
 
     // | ----------------------- node parameters ------------------------------------------------- |
 
-    /* String like "/dev/ttyACM0 */
+    /** String like "/dev/ttyACM0 */
     std::string portname_;
     int         baudrate_;
-    /* Enables printing more informations */
-    bool        pretty_log_;
+    /** Period use to log statistic data. Period <= 0 means no statistic logging.*/ 
+    int         stat_period_s_;
 
     // | ----------------------- subscribers ----------------------------------------------------- |
     
@@ -75,12 +72,13 @@ private:
     // | ----------------------- timers ---------------------------------------------------------- |
     
     std::shared_ptr<TimerType> timer_connection_;
-    void                       timerConnection();
+    void                       timerCbConnection();
     double                     timer_connection_rate_ = 1.0;
 
     std::shared_ptr<TimerType> timer_statistics_;
-    void                       timerStatistics();
-    double                     timer_statistics_rate_ = 1.0;
+    void                       timerCbStatistics();
+    /** base on stat_period_s_ when "stat_period_s_ <= 0 statistic is turened off" */
+    double                     timer_statistics_rate_;
 
 
     // | ----------------------- serial port ----------------------------------------------------- |
@@ -94,20 +92,35 @@ private:
     bool connected_   = false;
     std::mutex mutex_connected_; // guards connected_
     std::vector<msg_counter_t> received_msgs_;
-    std::mutex mutex_received_msgs_; // guards received_msgs_
-    std::vector<msg_counter_t> sent_msgs_;
-    std::mutex mutex_sent_msgs_; // guards sent_msgs_
     std::vector<msg_stats_t> received_msgs_stats_;
+    std::mutex mutex_received_msgs_; // guards received_msgs_ and received_msgs_stats_
+    std::vector<msg_counter_t> sent_msgs_;
     std::vector<msg_stats_t> sent_msgs_stats_;
+    std::mutex mutex_sent_msgs_; // guards sent_msgs_ and sent_msgs_stats_
 
+    /** 
+     * @brief Loop that handles incomming messages from serial port.
+     */
     void serialThreadRx(void);
+    /**
+     * @brief Subscriber sh_llcp_tx_ callback that handles sending llcp messages via serial port.
+     */
     void sendLlcpMessage(const mrs_modules_msgs::msg::Llcp::ConstSharedPtr msg);
     void connectToSerial(void);
-    void callbackSendMessage(void);
     bool openSerialPort(std::string portname, int baudrate);
 
-    // | ---------------------- other member functions ------------------------------------------- |
+    // | ---------------------- statistic -------------------------------------------------------- |
+    static const std::string received_msgs_label_;
+    static const std::string sent_msgs_label_;
 
-    void printStatistics(void);
-    void updateStatistics(void);
+    /** 
+     * @brief Reset statistics about received and sent messsages. When serial port connection is
+     * lost the statistics are reset. 
+    */
+    void resetStatistics(void);
+    void printStatistic(std::vector<msg_stats_t> &stats, std::mutex &stat_mtx, 
+            const std::string &label);
+    void updateStatistic(std::vector<msg_counter_t> &msgs, std::vector<msg_stats_t> &stats,
+            std::mutex & stat_mtx);
+    void addMsgToStatistic(uint8_t msg_id, std::vector<msg_counter_t> &msgs, std::mutex & stat_mtx);
 };
