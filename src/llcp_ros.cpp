@@ -42,15 +42,18 @@ void MrsLlcpRos::initialize()
 
     param_loader.addYamlFileFromParam("config_private");
 
-    param_loader.loadParam("portname", portname_);
-    param_loader.loadParam("baudrate", baudrate_);
-    param_loader.loadParam("statistic_period_s", stat_period_s_);
+    // param_loader.loadParam("portname", portname_);
+    // param_loader.loadParam("baudrate", baudrate_);
+    // param_loader.loadParam("statistic_period_s", stat_period_s_);
+    portname_ = "/dev/ttyACM0";
+    baudrate_ = 115200;
+    stat_period_s_ = 1;
 
-    if (!param_loader.loadedSuccessfully()) {
-        RCLCPP_ERROR(node_->get_logger(), "[AutomaticStart]: Could not load all parameters!");
-        rclcpp::shutdown();
-        exit(1);
-    }
+    // if (!param_loader.loadedSuccessfully()) {
+    //     RCLCPP_ERROR(node_->get_logger(), "[AutomaticStart]: Could not load all parameters!");
+    //     rclcpp::shutdown();
+    //     exit(1);
+    // }
     
     // | ----------------------- subscribers ----------------------------------------------------- |
     
@@ -69,7 +72,7 @@ void MrsLlcpRos::initialize()
 
     // | --------------------- serial port ------------------------------------------------------- |
     
-    serial_port_.set_node(node_);
+    serial_port_.set_node(node_)
     connectToSerial();
     initialized_ = true;
     
@@ -86,8 +89,8 @@ void MrsLlcpRos::initialize()
         timer_connection_ = std::make_shared<TimerType>(timer_opts_start,
             rclcpp::Rate(timer_connection_rate_, clock_), timer_connection_cb);
     }
-    if (stat_period_s_ > 0)
 
+    if (stat_period_s_ > 0)
     {
         timer_statistics_rate_ = 1.0 / stat_period_s_;
         std::function<void()> timer_statistics_cb = std::bind(

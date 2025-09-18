@@ -29,6 +29,7 @@ if(ENABLE_COVERAGE)
 endif()
 
 add_definitions(-DLLCP_LITTLE_ENDIAN)
+add_definitions(-DLLCP_COMM_HEXADECIMAL=0)
 
 # find packages
 set (DEPENDENCIES 
@@ -43,7 +44,7 @@ set (DEPENDENCIES
   )
 
 set (LIBRARIES
-  MrsLlcpRos_Llcp
+  MrsLlcpRos_Llc
   )
 
 set (EXECUTABLES
