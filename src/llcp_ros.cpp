@@ -42,18 +42,15 @@ void MrsLlcpRos::initialize()
 
     param_loader.addYamlFileFromParam("config_private");
 
-    // param_loader.loadParam("portname", portname_);
-    // param_loader.loadParam("baudrate", baudrate_);
-    // param_loader.loadParam("statistic_period_s", stat_period_s_);
-    portname_ = "/dev/ttyACM0";
-    baudrate_ = 115200;
-    stat_period_s_ = 1;
+    param_loader.loadParam("portname", portname_);
+    param_loader.loadParam("baudrate", baudrate_);
+    param_loader.loadParam("statistic_period_s", stat_period_s_);
 
-    // if (!param_loader.loadedSuccessfully()) {
-    //     RCLCPP_ERROR(node_->get_logger(), "[AutomaticStart]: Could not load all parameters!");
-    //     rclcpp::shutdown();
-    //     exit(1);
-    // }
+    if (!param_loader.loadedSuccessfully()) {
+        RCLCPP_ERROR(node_->get_logger(), "[Ros Llcp]: Could not load all parameters!");
+        rclcpp::shutdown();
+        exit(1);
+    }
     
     // | ----------------------- subscribers ----------------------------------------------------- |
     
@@ -72,7 +69,7 @@ void MrsLlcpRos::initialize()
 
     // | --------------------- serial port ------------------------------------------------------- |
     
-    serial_port_.set_node(node_)
+    serial_port_.set_node(node_);
     connectToSerial();
     initialized_ = true;
     

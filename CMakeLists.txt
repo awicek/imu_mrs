@@ -44,7 +44,7 @@ set (DEPENDENCIES
   )
 
 set (LIBRARIES
-  MrsLlcpRos_Llc
+  MrsLlcpRos_Llcp
   )
 
 set (EXECUTABLES
