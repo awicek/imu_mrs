@@ -4,6 +4,13 @@ Clone this repository and call:
 gitman install
 ```
 
+## The premmisions 
+The premmisions for the /dev/ttyACMX devices has to be set for the $USER
+
+```
+sudo usermod -a -G dialout $USER
+```
+
 # mrs_llcp_ros
 This package is the ROS interface for the low-level communication protocol (LLCP) which is used by the MRS group to communicate with lower level devices.
 The management of the serial port on Linux can be a hassle, so this packages takes care of that for you, you just specify the serial port and baud rate in a config or a launch file.
@@ -30,8 +37,8 @@ If you want to send a message to the low-level device, publish it to the `send_m
 Here is some example code (taken from [llcp_example](https://github.com/ctu-mrs/llcp_example)) showing you how to send and receive messages:
 
 ## message definitions
-
-```c
+****
+``**`c**
 #define DATA_MSG_ID 52
 #define HEARTBEAT_MSG_ID 51
 

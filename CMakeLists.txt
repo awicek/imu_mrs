@@ -30,6 +30,10 @@ endif()
 
 add_definitions(-DLLCP_LITTLE_ENDIAN)
 add_definitions(-DLLCP_COMM_HEXADECIMAL=0)
+add_definitions(-DLLCP_APPEND_ENDL=0)
+add_definitions(-DLLCP_DEBUG_PRINT=0)
+add_definitions(-DLLCP_CHECK_CHECKSUM=1)
+
 
 # find packages
 set (DEPENDENCIES 

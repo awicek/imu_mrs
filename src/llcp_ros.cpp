@@ -120,6 +120,7 @@ void MrsLlcpRos::connectToSerial()
     {
         std::scoped_lock lock(mutex_connected_);
         connected_ = true;
+        llcp_initialize(&llcp_receiver_);
     }
 
     serial_thread_ = std::thread(&MrsLlcpRos::serialThreadRx, this);
@@ -297,6 +298,17 @@ void MrsLlcpRos::serialThreadRx(void)
              *  it will return max_int number of read bytes, thats why we check it against the
              *  SERIAL_BUFFER_SIZE
              */
+            
+            RCLCPP_DEBUG(this->get_logger(), 
+            "Read %d bytes from serial port",
+                    bytes_read);
+            
+            std::stringstream ss;
+            for (int i = 0; i < bytes_read; ++i) {
+                ss << std::hex << std::setw(2) << std::setfill('0') << (int)(uint8_t)rx_buffer[i] << " ";
+            }
+            RCLCPP_DEBUG(this->get_logger(), "Data: %s", ss.str().c_str());
+            
 
             for (uint16_t i = 0; i < bytes_read; i++)
             {
